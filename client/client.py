@@ -33,10 +33,29 @@ def createPacket(id, num, message):
 
 def sendFile(filename, addr):
     s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+    s.settimeout(5)
+
     id = 4
     num = 0
     packet = createPacket(id, num, filename.encode())
-    s.sendto(packet, (addr, 1))
+
+    code = 0
+    while True:
+        try:
+            if code == 0:
+                s.sendto(packet, (addr, 1))
+                code = 1
+            data, address = s.recvfrom(1508)
+            if struct.unpack('b', data[20:21])[0] != 0:
+                continue
+            if (data[28:len(data)]).decode() == 'opened':
+                break
+            if (data[28:len(data)]).decode() == 'corrupted':
+                code = 0
+                continue
+        except socket.timeout:
+            code = 0
+            continue
 
     f = open(filename, 'rb')
     message = f.read(1472)
@@ -48,7 +67,24 @@ def sendFile(filename, addr):
             num = 0
         all_len += len(message)
         packet = createPacket(id, num, message)
-        s.sendto(packet, (addr, 1))
+        code = 0
+        while True:
+            try:
+                if code == 0:
+                    s.sendto(packet, (addr, 1))
+                    code = 1
+
+                data, address = s.recvfrom(1508)
+                if struct.unpack('b', data[20:21])[0] != 0:
+                    continue
+                if (data[28:len(data)]).decode() == 'correct':
+                    break
+                if (data[28:len(data)]).decode() == 'corrupted':
+                    code = 0
+                    continue
+            except socket.timeout:
+                code = 0
+                continue
         message = f.read(1472)
         print(num)
     packet = createPacket(id, num, b'')

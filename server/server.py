@@ -31,6 +31,14 @@ def checkCorrect(packet):
     return realSum == expectedSum
 
 
+def createPacket(id, num, message):
+    header = struct.pack('bbHHh', 0, 0, 0, id, num)
+    packet = header + message
+    check = checkSum(str(packet))
+    header = struct.pack('bbHHh', 0, 0, check, id, num)
+    return header + message
+
+
 def listen():
     s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
     s.bind(('', 14900))
@@ -38,21 +46,25 @@ def listen():
     num = 1
     while 1:
         data, address = s.recvfrom(1508)
-        if checkCorrect(data):
-            print('Correct')
-        else:
-            print('Data corrupted')
-
         packetNum = struct.unpack('H', data[26:28])[0]
+        if not checkCorrect(data):
+            print('Data corrupted')
+            s.sendto(createPacket(0, packetNum, 'corrupted'.encode()), address)
+            continue
+
         if len(data) == 28:
-            places.pop(address[0]).close()
+            item = places.pop(address[0])
+            print(item[1])
+            item[0].close()
             break
         elif address[0] not in places.keys():
-            places[address[0]] = open((data[28:len(data)]).decode(), 'wb')
-        else:
-            print(num)
-            num += 1
+            places[address[0]] = [open((data[28:len(data)]).decode(), 'wb'), 0]
+            s.sendto(createPacket(0, packetNum, 'opened'.encode()), address)
+        elif packetNum == places[address[0]][1] + 1:
+            print('Correct')
             print(packetNum)
-            places[address[0]].write(data[28:len(data)])
+            places[address[0]][1] += 1
+            places[address[0]][0].write(data[28:len(data)])
+            s.sendto(createPacket(0, packetNum, 'correct'.encode()), address)
 
 listen()

@@ -1,0 +1,97 @@
+Here you can get information about received files.
+You can find information by name of file.
+
+File: cool.jpg
+Saved as: cool.jpg
+Received from: 127.0.0.1
+Time: 2017-05-20 21:36:22.113669
+
+File: cool.jpg
+Saved as: cool.jpg
+Received from: 127.0.0.1
+Time: 2017-05-20 23:45:36.593653
+
+File: cool.jpg
+Saved as: 1_cool.jpg
+Received from: 127.0.0.1
+Time: 2017-05-20 23:47:20.207633
+
+File: aaa.txt
+Saved as: aaa.txt
+Received from: 127.0.0.1
+Time: 2017-05-21 00:25:48.694249
+
+File: aaa.txt
+Saved as: 2_aaa.txt
+Received from: 127.0.0.1
+Time: 2017-05-21 00:31:31.618864
+
+File: aaa.txt
+Saved as: 3_aaa.txt
+Received from: 127.0.0.1
+Time: 2017-05-21 00:31:44.186001
+
+File: aaa.txt
+Saved as: aaa.txt
+Received from: 127.0.0.1
+Time: 2017-05-21 00:33:42.114565
+
+File: prr.jpg
+Saved as: prr.jpg
+Received from: 127.0.0.1
+Time: 2017-05-21 00:34:09.816584
+
+File: p.png
+Saved as: p.png
+Received from: 127.0.0.1
+Time: 2017-05-21 00:36:58.695761
+
+File: p.png
+Saved as: p.png
+Received from: 127.0.0.1
+Time: 2017-05-21 00:42:58.721306
+
+File: cool.jpg
+Saved as: cool.jpg
+Received from: 127.0.0.1
+Time: 2017-05-21 00:43:27.988014
+
+File: aaa.txt
+Saved as: aaa.txt
+Received from: 127.0.0.1
+Time: 2017-05-21 00:49:09.243530
+
+File: aaa.txt
+Saved as: 1_aaa.txt
+Received from: 127.0.0.1
+Time: 2017-05-21 00:49:13.052922
+
+File: p.png
+Saved as: p.png
+Received from: 127.0.0.1
+Time: 2017-05-21 00:49:50.157811
+
+File: p.png
+Saved as: p.png
+Received from: 127.0.0.1
+Time: 2017-05-21 00:59:02.565668
+
+File: cool.jpg
+Saved as: cool.jpg
+Received from: 127.0.0.1
+Time: 2017-05-21 00:59:16.690421
+
+File: prr.jpg
+Saved as: prr.jpg
+Received from: 127.0.0.1
+Time: 2017-05-21 00:59:31.922547
+
+File: prr.jpg
+Saved as: prr.jpg
+Received from: 127.0.0.1
+Time: 2017-05-21 01:00:27.102334
+
+File: cool.jpg
+Saved as: cool.jpg
+Received from: 127.0.0.1
+Time: 2017-05-21 01:01:33.426022

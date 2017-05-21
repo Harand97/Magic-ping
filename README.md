@@ -6,9 +6,11 @@ Client-server app, hiding traffic in the ICMP packet
 2. Строка-ключ для XOR-шифрования, одинаковая для клиента и сервера
 
 Для запуска сервера: *sudo python3 server.py*
+
 Прекращение работы сервера через SigInt - CTRL + C (стандартно)
 
 Формат запуска клиента: *sudo python3 client.py [-f <filename>] [-adr <ip_address>] [-cr]*
+
 Прекращает работу при отсылке файла
 
 Вся информация о пересылках фиксируется в логах.

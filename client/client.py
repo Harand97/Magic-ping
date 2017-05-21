@@ -9,6 +9,10 @@ MAX_ITER = 20
 
 
 def parse_input():
+    """
+    Парсер аргументов программы
+    :return: кортеж (имя файла, адрес, статус шифрования)
+    """
     try:
         file_name = sys.argv[sys.argv.index('-f') + 1]
         address = sys.argv[sys.argv.index('-adr') + 1]
@@ -22,13 +26,23 @@ def parse_input():
         exit(0)
 
 
-def set_logger():
+def set_logger(log_file_name):
+    """
+    Установка нужных настроек логирования
+    :return: -
+    :param log_file_name: имя лог-файла
+    """
     logging.basicConfig(format='%(filename)s[LINE:%(lineno)d]# %(levelname)-8s [%(asctime)s] %(message)s',
                         level=logging.DEBUG,
-                        filename='client.log')
+                        filename=log_file_name)
 
 
 def check_sum(inf_string):
+    """
+    Подсчет контрольной суммы для icmp пакета
+    :param inf_string: пакет в виде байт-строки
+    :return: полученная контрольная сумма
+    """
     hash_sum = 0
     count_to = (len(inf_string) // 2) * 2
     count = 0
@@ -50,6 +64,13 @@ def check_sum(inf_string):
 
 
 def create_packet(id, num, message):
+    """
+    Создание icmp пакета
+    :param id: идентификатор из заголовка пакета
+    :param num: номер пакета
+    :param message: поле данных пакета
+    :return: полученный пакет
+    """
     header = struct.pack('bbHHh', 8, 0, 0, id, num)
     packet = header + message
     check = check_sum(str(packet))
@@ -58,7 +79,17 @@ def create_packet(id, num, message):
 
 
 def send_packet(sock, packet, expected_response, addr):
+    """
+    Отправка пакета по заданному адресу до получения заданого ответа или некоторого количества таймаутов
+    :param sock: сокет
+    :param packet: пакет
+    :param expected_response: ожидаемый ответ при успешном получении
+    :param addr: адрес
+    :return: True при успешном отправлении, False, если сервер недоступен
+    """
     code = 0
+
+    # Подсчет истеченных таймаутов
     i = 0
     while True:
         try:
@@ -68,9 +99,16 @@ def send_packet(sock, packet, expected_response, addr):
                 sock.sendto(packet, (addr, 1))
                 code = 1
             data, address = sock.recvfrom(1508)
+
+            # Принимает только эхо-ответы
             if struct.unpack('b', data[20:21])[0] != 0:
                 continue
+
             answer = (data[28:len(data)]).decode()
+
+            # Если получен ожидаемый ответ, все прошло успешно. Если получен ответ "again", значит, сервер уже получил
+            # пакет, но его оповещение об этом не дошло до данного клиента или дошло в некорректной форме, поэтому
+            # было пропущенно.
             if answer == expected_response or answer == 'again':
                 return True
             code = 0
@@ -82,19 +120,29 @@ def send_packet(sock, packet, expected_response, addr):
             continue
 
 
-def send_file(file_name, addr, crypt):
+def send_file(file_name, addr, crypt, key):
+    """
+    Основная функция клиента, отправка некоего файла на сервер
+    :param file_name: имя отправляемого файла
+    :param addr: адрес сервера
+    :param crypt: статус шифрования
+    :param key: ключ для XOR-шифрования
+    :return: 
+    """
     s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
     s.settimeout(0.5)
 
-    id = 4
+    id = 0
     num = 0
     message = file_name
-    cipher = XOR.new((open('key.txt', 'r')).readline())
+
+    cipher = XOR.new(key)
     if crypt:
         message += ' true'
     else:
         message += ' false'
 
+    # Первый отправляемый пакет содержит имя файла и статус использования шифрования
     packet = create_packet(id, num, message.encode())
 
     logging.info('Sending filename to server')
@@ -108,13 +156,17 @@ def send_file(file_name, addr, crypt):
 
     logging.info('Sending of file started')
 
+    # Получение размера файла для отображения прогресса отправления
     file_size = os.path.getsize(file_name)
+
     f = open(file_name, 'rb')
-    message = f.read(1472)
+    message = f.read(192)
     all_len = 0
 
     progress = 0
     num_data_sent = 0
+
+    # В цикле файл читается и отправляется пакетами, попутно выводится прогресс отправки файла
     while message:
         all_len += len(message)
         logging.debug('Sending packet {}'.format(num))
@@ -128,17 +180,20 @@ def send_file(file_name, addr, crypt):
             logging.error('Server is not available')
             return
         num_data_sent += len(message)
-        message = f.read(1472)
+        message = f.read(192)
 
         if int((num_data_sent / file_size) * 100) > progress:
             progress = int(num_data_sent / file_size * 100)
             print(str(progress) + '%')
 
+        # Так как поле номера пакета 16-битное, а приложение может взаимодействовать с файлами, размер которых
+        # превышает 10ГБ, номер пакета обнуляется, когда доходит до максимально-возможного 16-битного числа
         if num + 1 < 0xffff:
             num += 1
         else:
             num = 0
 
+    # В конце отправляется пустой пакет, сигнализирующий о завершении передачи
     logging.debug('Sending last packet')
 
     packet = create_packet(id, num, b'')
@@ -149,6 +204,10 @@ def send_file(file_name, addr, crypt):
         return
 
 
-set_logger()
-filename, address, crypt_status = parse_input()
-send_file(filename, address, crypt_status)
+conf = open('config.txt', 'r')
+try:
+    set_logger(conf.readline())
+    filename, address, crypt_status = parse_input()
+    send_file(filename, address, crypt_status, conf.readline())
+except EOFError:
+    logging.error('Wrong format of config file')

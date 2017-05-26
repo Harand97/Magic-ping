@@ -3,7 +3,12 @@ import struct
 import logging
 import datetime
 import os
+import signal
 from Crypto.Cipher import XOR
+
+ECHO_REPLY = 0
+ECHO_REQUEST = 8
+PORT = 14900
 
 
 def set_logger(log_file_name):
@@ -17,9 +22,18 @@ def set_logger(log_file_name):
                         filename=log_file_name)
 
 
+def handle_sigint(signal, frame):
+    """
+    Обработка SigInt (Crtl + C)
+    """
+    logging.info('Work was stopped')
+    print('\nInterrupting. Server was stopped')
+    exit(0)
+
+
 def check_sum(inf_string):
     """
-    Подсчет контрольной суммы для icmp пакета
+    Подсчет контрольной суммы для icmp пакета по алгоритму RFC1071
     :param inf_string: пакет в виде байт-строки
     :return: полученная контрольная сумма
     """
@@ -49,25 +63,25 @@ def check_correct(packet):
     :param packet: доставленный пакет
     :return: True, если пакет корректен, иначе False
     """
-    type, code, expected_sum, id, num = struct.unpack('bbHHh', packet[20:28])
+    packet_type, code, expected_sum, client_id, num = struct.unpack('bbHHh', packet[20:28])
     message = packet[28:len(packet)]
-    header = struct.pack('bbHHh', type, code, 0, id, num)
+    header = struct.pack('bbHHh', packet_type, code, 0, client_id, num)
     real_sum = check_sum(str(header + message))
     return real_sum == expected_sum
 
 
-def create_packet(id, num, message):
+def create_packet(server_id, num, message):
     """
     Создание icmp пакета
-    :param id: идентификатор из заголовка пакета
+    :param server_id: идентификатор из заголовка пакета
     :param num: номер пакета
     :param message: поле данных пакета
     :return: полученный пакет
     """
-    header = struct.pack('bbHHh', 0, 0, 0, id, num)
+    header = struct.pack('bbHHh', ECHO_REPLY, 0, 0, server_id, num)
     packet = header + message
     check = check_sum(str(packet))
-    header = struct.pack('bbHHh', 0, 0, check, id, num)
+    header = struct.pack('bbHHh', ECHO_REPLY, 0, check, server_id, num)
     return header + message
 
 
@@ -99,21 +113,26 @@ def listen(key):
     :return: -
     """
     s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
-    s.bind(('', 14900))
+    s.bind(('', PORT))
+
+    logging.info('Start working')
+
+    cipher = XOR.new(key)
 
     # Открывается файл, в который будет вноситься вся информация о полученных файлах
     # connects - словарь вида
     # {адрес : (открытый файл, номер текущего пакета, информация о посылке, статус шифрования)}
     info = open('work_history.txt', 'a')
-    cipher = XOR.new(key)
     connects = {}
 
     while True:
-        data, address = s.recvfrom(1508)
+        data, address = s.recvfrom(192)
 
         # Сервер обрабатывает только запросы
-        if struct.unpack('b', data[20:21])[0] != 8:
+        if struct.unpack('b', data[20:21])[0] != ECHO_REQUEST:
             continue
+
+        address = (socket.gethostbyname(address[0]), PORT)
 
         logging.info('Received packet from {} '.format(address[0]))
 
@@ -138,12 +157,16 @@ def listen(key):
             # Иначе создается новый файл под новое соединение, генерируется имя для этого файла
             # В about_file пишется информация о новом клиенте, чтобы в случае успешного сеанса записать в файл отчета
             file_name, crypt = (data[28:len(data)]).decode().split(' ')
+            crypt = int(crypt)
             uniq_name = give_unique_name(file_name)
             about_file = '\nFile: {}\nSaved as: {}\nReceived from: {}\nTime: {}\n'.format(
                 file_name, uniq_name, address[0], datetime.datetime.now()
             )
             logging.info('New client. Opening new file {} for acceptance'.format(uniq_name))
             connects[address[0]] = [open(uniq_name, 'wb'), 0, about_file, crypt]
+
+            # Даем права доступа другим пользователям к получаемому файлу
+            os.chmod(uniq_name, 0o777)
             s.sendto(create_packet(0, packet_num, 'opened'.encode()), address)
 
         # Ловится всегда следующий пакет
@@ -155,6 +178,8 @@ def listen(key):
                 s.sendto(create_packet(0, packet_num, b''), address)
                 item = connects.pop(address[0])
                 item[0].close()
+                print('\nNew file received.\nInformation, that will be written in work_history.txt:{}'.
+                      format(item[2]))
                 info.write(item[2])
 
             # Иначе просто обновляется счетчик пакетов, дописывается принимаемый файл
@@ -162,10 +187,11 @@ def listen(key):
                 logging.debug('Correct data in packet')
                 connects[address[0]][1] = packet_num
                 message = data[28:len(data)]
-                if connects[address[0]][3] == 'true':
+                if connects[address[0]][3]:
                     message = cipher.decrypt(message)
                 connects[address[0]][0].write(message)
-                s.sendto(create_packet(0, packet_num, 'correct'.encode()), address)
+                packet = create_packet(0, packet_num, 'correct'.encode())
+                s.sendto(packet, address)
 
         # Клиент может прислать один и тот же пакет несколько раз, если до него не дошел или дошел некорректно
         # ответ сервера о получении пакета, в таком случае отправляется сообщение "again"
@@ -173,9 +199,12 @@ def listen(key):
             logging.debug('again')
             s.sendto(create_packet(0, packet_num, 'again'.encode()), address)
 
-conf = open('config.txt', 'r')
-try:
-    set_logger(conf.readline())
-    listen(conf.readline())
-except EOFError:
-    logging.error('Wrong format of config file')
+
+if __name__ == '__main__':
+    signal.signal(signal.SIGINT, handle_sigint)
+    conf = open('config.txt', 'r')
+    try:
+        set_logger(conf.readline()[:-1])
+        listen(conf.read(32))
+    except EOFError:
+        logging.error('Wrong format of config file')

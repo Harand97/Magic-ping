@@ -1,9 +1,3 @@
 Необходимые пакеты:
 
-socket
-struct
-logging
-datetime
-os
-Crypto
-sys
+модуль Cipher из Crypto

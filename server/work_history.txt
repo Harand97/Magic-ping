@@ -1,8 +1,0 @@
-Here you can get information about received files.
-You can find information by name of file.
-
-
-File: config.txt
-Saved as: 1_config.txt
-Received from: 127.0.0.1
-Time: 2017-05-21 18:28:54.598882

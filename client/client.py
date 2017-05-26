@@ -3,9 +3,14 @@ import socket
 import logging
 import sys
 import os
+import signal
 from Crypto.Cipher import XOR
 
+
 MAX_ITER = 20
+PORT = 14900
+ECHO_REQUEST = 8
+ECHO_REPLY = 0
 
 
 def parse_input():
@@ -37,6 +42,15 @@ def set_logger(log_file_name):
                         filename=log_file_name)
 
 
+def handle_sigint(signal, frame):
+    """
+    Обработка SigInt (Crtl + C)
+    """
+    logging.info('Work was stopped')
+    print('\nInterrupting. Client was stopped')
+    exit(0)
+
+
 def check_sum(inf_string):
     """
     Подсчет контрольной суммы для icmp пакета
@@ -63,18 +77,18 @@ def check_sum(inf_string):
     return answer
 
 
-def create_packet(id, num, message):
+def create_packet(client_id, num, message):
     """
     Создание icmp пакета
-    :param id: идентификатор из заголовка пакета
+    :param client_id: идентификатор из заголовка пакета
     :param num: номер пакета
     :param message: поле данных пакета
     :return: полученный пакет
     """
-    header = struct.pack('bbHHh', 8, 0, 0, id, num)
+    header = struct.pack('bbHHh', ECHO_REQUEST, 0, 0, client_id, num)
     packet = header + message
     check = check_sum(str(packet))
-    header = struct.pack('bbHHh', 8, 0, check, id, num)
+    header = struct.pack('bbHHh', ECHO_REQUEST, 0, check, client_id, num)
     return header + message
 
 
@@ -88,20 +102,20 @@ def send_packet(sock, packet, expected_response, addr):
     :return: True при успешном отправлении, False, если сервер недоступен
     """
     code = 0
-
-    # Подсчет истеченных таймаутов
+    addr = socket.gethostbyname(addr)
+    # Подсчет таймаутов
     i = 0
     while True:
         try:
             if i == MAX_ITER:
                 return False
             if code == 0:
-                sock.sendto(packet, (addr, 1))
+                sock.sendto(packet, (addr, PORT))
                 code = 1
-            data, address = sock.recvfrom(1508)
+            data, reply_addr = sock.recvfrom(1500)
 
-            # Принимает только эхо-ответы
-            if struct.unpack('b', data[20:21])[0] != 0:
+            # Принимает только эхо-ответы от сервера, которому отправил пакет
+            if struct.unpack('b', data[20:21])[0] != ECHO_REPLY or reply_addr[0] != addr:
                 continue
 
             answer = (data[28:len(data)]).decode()
@@ -113,10 +127,10 @@ def send_packet(sock, packet, expected_response, addr):
                 return True
             code = 0
         except socket.timeout:
-            if len(packet) == 8:
-                print('lol')
             code = 0
             i += 1
+            continue
+        except UnicodeDecodeError:
             continue
 
 
@@ -132,18 +146,19 @@ def send_file(file_name, addr, crypt, key):
     s = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
     s.settimeout(0.5)
 
-    id = 0
-    num = 0
-    message = file_name
-
     cipher = XOR.new(key)
+
+    client_id = 1
+    num = 0
+    message = file_name.encode()
+
     if crypt:
-        message += ' true'
+        message += ' 1'.encode()
     else:
-        message += ' false'
+        message += ' 0'.encode()
 
     # Первый отправляемый пакет содержит имя файла и статус использования шифрования
-    packet = create_packet(id, num, message.encode())
+    packet = create_packet(client_id, num, message)
 
     logging.info('Sending filename to server')
 
@@ -151,6 +166,7 @@ def send_file(file_name, addr, crypt, key):
         logging.info('Filename was sent to server')
     else:
         logging.error('Server is not available')
+        print('Server is not available')
         return
     num += 1
 
@@ -160,7 +176,7 @@ def send_file(file_name, addr, crypt, key):
     file_size = os.path.getsize(file_name)
 
     f = open(file_name, 'rb')
-    message = f.read(192)
+    message = f.read(164)
     all_len = 0
 
     progress = 0
@@ -172,19 +188,20 @@ def send_file(file_name, addr, crypt, key):
         logging.debug('Sending packet {}'.format(num))
         if crypt:
             message = cipher.encrypt(message)
-        packet = create_packet(id, num, message)
+        packet = create_packet(client_id, num, message)
 
         if send_packet(s, packet, 'correct', addr):
             logging.debug('Packet {} was sent successful'.format(num))
         else:
             logging.error('Server is not available')
+            print('Server is not available')
             return
         num_data_sent += len(message)
-        message = f.read(192)
+        message = f.read(164)
 
         if int((num_data_sent / file_size) * 100) > progress:
             progress = int(num_data_sent / file_size * 100)
-            print(str(progress) + '%')
+            print('Sending progress: ' + str(progress) + '%')
 
         # Так как поле номера пакета 16-битное, а приложение может взаимодействовать с файлами, размер которых
         # превышает 10ГБ, номер пакета обнуляется, когда доходит до максимально-возможного 16-битного числа
@@ -196,18 +213,21 @@ def send_file(file_name, addr, crypt, key):
     # В конце отправляется пустой пакет, сигнализирующий о завершении передачи
     logging.debug('Sending last packet')
 
-    packet = create_packet(id, num, b'')
+    packet = create_packet(client_id, num, b'')
     if send_packet(s, packet, '', addr):
         logging.info('File was sent to server successfully')
     else:
         logging.error('Server is not available')
+        print('Server is not available')
         return
 
 
-conf = open('config.txt', 'r')
-try:
-    set_logger(conf.readline())
-    filename, address, crypt_status = parse_input()
-    send_file(filename, address, crypt_status, conf.readline())
-except EOFError:
-    logging.error('Wrong format of config file')
+if __name__ == '__main__':
+    signal.signal(signal.SIGINT, handle_sigint)
+    conf = open('config.txt', 'r')
+    try:
+        set_logger(conf.readline()[:-1])
+        filename, address, crypt_status = parse_input()
+        send_file(filename, address, crypt_status, conf.read(32))
+    except EOFError:
+        logging.error('Wrong format of config file')

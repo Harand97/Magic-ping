@@ -85,10 +85,10 @@ def create_packet(client_id, num, message):
     :param message: поле данных пакета
     :return: полученный пакет
     """
-    header = struct.pack('bbHHh', ECHO_REQUEST, 0, 0, client_id, num)
+    header = struct.pack('bbHHH', ECHO_REQUEST, 0, 0, client_id, num)
     packet = header + message
     check = check_sum(str(packet))
-    header = struct.pack('bbHHh', ECHO_REQUEST, 0, check, client_id, num)
+    header = struct.pack('bbHHH', ECHO_REQUEST, 0, check, client_id, num)
     return header + message
 
 

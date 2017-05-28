@@ -63,9 +63,9 @@ def check_correct(packet):
     :param packet: доставленный пакет
     :return: True, если пакет корректен, иначе False
     """
-    packet_type, code, expected_sum, client_id, num = struct.unpack('bbHHh', packet[20:28])
+    packet_type, code, expected_sum, client_id, num = struct.unpack('bbHHH', packet[20:28])
     message = packet[28:len(packet)]
-    header = struct.pack('bbHHh', packet_type, code, 0, client_id, num)
+    header = struct.pack('bbHHH', packet_type, code, 0, client_id, num)
     real_sum = check_sum(str(header + message))
     return real_sum == expected_sum
 
@@ -78,10 +78,10 @@ def create_packet(server_id, num, message):
     :param message: поле данных пакета
     :return: полученный пакет
     """
-    header = struct.pack('bbHHh', ECHO_REPLY, 0, 0, server_id, num)
+    header = struct.pack('bbHHH', ECHO_REPLY, 0, 0, server_id, num)
     packet = header + message
     check = check_sum(str(packet))
-    header = struct.pack('bbHHh', ECHO_REPLY, 0, check, server_id, num)
+    header = struct.pack('bbHHH', ECHO_REPLY, 0, check, server_id, num)
     return header + message
 
 

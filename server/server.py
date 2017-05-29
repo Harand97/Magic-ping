@@ -126,8 +126,7 @@ def listen(key):
     connects = {}
 
     while True:
-        data, address = s.recvfrom(192)
-
+        data, address = s.recvfrom(60000)
         # Сервер обрабатывает только запросы
         if struct.unpack('b', data[20:21])[0] != ECHO_REQUEST:
             continue

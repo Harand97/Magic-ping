@@ -11,6 +11,7 @@ MAX_ITER = 20
 PORT = 14900
 ECHO_REQUEST = 8
 ECHO_REPLY = 0
+SIZE = 1000
 
 
 def parse_input():
@@ -176,10 +177,9 @@ def send_file(file_name, addr, crypt, key):
     file_size = os.path.getsize(file_name)
 
     f = open(file_name, 'rb')
-    message = f.read(164)
+    message = f.read(SIZE - 28)
     all_len = 0
 
-    progress = 0
     num_data_sent = 0
 
     # В цикле файл читается и отправляется пакетами, попутно выводится прогресс отправки файла
@@ -197,11 +197,10 @@ def send_file(file_name, addr, crypt, key):
             print('Server is not available')
             return
         num_data_sent += len(message)
-        message = f.read(164)
+        message = f.read(SIZE)
 
-        if int((num_data_sent / file_size) * 100) > progress:
-            progress = int(num_data_sent / file_size * 100)
-            print('Sending progress: ' + str(progress) + '%')
+        progress = num_data_sent / file_size * 100
+        print('Sending progress: ' + "%.2f" % progress + '%')
 
         # Так как поле номера пакета 16-битное, а приложение может взаимодействовать с файлами, размер которых
         # превышает 10ГБ, номер пакета обнуляется, когда доходит до максимально-возможного 16-битного числа
